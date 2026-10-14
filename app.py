@@ -10,10 +10,16 @@ import streamlit as st
 
 from findoc.comparison.service import ComparisonService
 from findoc.config import get_settings
+from findoc.evaluation.runner import (
+    EvaluationRunner,
+    export_evaluation_markdown,
+    load_evaluation_dataset,
+)
 from findoc.generation.answer_service import AnswerService
 from findoc.generation.provider import get_llm_provider
 from findoc.ingestion.service import IngestionService
 from findoc.retrieval.retriever import RetrievalService
+from findoc.schemas import EvalSummary
 from findoc.storage.embeddings import get_embedding_service
 from findoc.storage.metadata_store import MetadataStore
 from findoc.storage.vector_store import ChromaVectorStore
@@ -90,6 +96,36 @@ st.markdown(
         color: #e2e8f0;
         font-style: italic;
     }
+    .badge-pass {
+        display: inline-block;
+        background: rgba(34, 197, 94, 0.2);
+        color: #4ade80;
+        border: 1px solid rgba(34, 197, 94, 0.4);
+        border-radius: 6px;
+        padding: 3px 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .badge-fail {
+        display: inline-block;
+        background: rgba(239, 68, 68, 0.2);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.4);
+        border-radius: 6px;
+        padding: 3px 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .badge-notrun {
+        display: inline-block;
+        background: rgba(148, 163, 184, 0.2);
+        color: #94a3b8;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        border-radius: 6px;
+        padding: 3px 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -124,12 +160,18 @@ def get_app_services():
     retriever = RetrievalService(embedder, vstore)
     answer_service = AnswerService(retriever, provider)
     comparison_service = ComparisonService(retriever, provider, meta_store)
+    eval_runner = EvaluationRunner(
+        ingestion_service=ingestion,
+        retrieval_service=retriever,
+        answer_service=answer_service,
+        metadata_store=meta_store,
+    )
 
-    return settings, meta_store, vstore, ingestion, answer_service, provider, comparison_service
+    return settings, meta_store, vstore, ingestion, answer_service, provider, comparison_service, eval_runner
 
 
 # Initialize services
-settings, meta_store, vstore, ingestion, answer_service, provider, comparison_service = get_app_services()
+settings, meta_store, vstore, ingestion, answer_service, provider, comparison_service, eval_runner = get_app_services()
 
 # Sidebar Navigation
 st.sidebar.title("FinDoc AI")
@@ -152,7 +194,7 @@ else:
 st.sidebar.markdown("---")
 page = st.sidebar.radio(
     "Navigation",
-    ["Overview", "Document Library", "Ask FinDoc", "Compare Documents", "About & Privacy"],
+    ["Overview", "Document Library", "Ask FinDoc", "Compare Documents", "Evaluation & Diagnostics", "About & Privacy"],
     index=0,
 )
 
@@ -542,9 +584,196 @@ elif page == "Compare Documents":
             )
 
 # -------------------------------------------------------------
-# SCREEN 5: ABOUT & PRIVACY
+# SCREEN 5: EVALUATION & DIAGNOSTICS
+# -------------------------------------------------------------
+elif page == "Evaluation & Diagnostics":
+    st.title("Evaluation Suite & Quality Diagnostics")
+    st.write(
+        "Benchmark retrieval recall (Hit@K), citation-ID provenance, explicit abstention on "
+        "unanswerable questions, and prompt-injection defense against a fixed 18-case synthetic financial dataset."
+    )
+
+    eval_summary: EvalSummary = st.session_state.get("eval_summary")
+
+    if eval_summary is None:
+        st.markdown(
+            """
+            <div class="metric-card">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0; color:#f8fafc;">Benchmark Execution Status</h3>
+                    <span class="badge-notrun">NOT RUN</span>
+                </div>
+                <p style="color:#94a3b8; margin-top:10px; margin-bottom:0;">
+                    In accordance with FinDoc AI engineering rules and <code>AGENTS.md</code>, no fabricated 
+                    pass rates, simulated scores, or placeholder percentages are displayed until the real 
+                    evaluation engine has executed against local test documents.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            """
+            #### What This Benchmark Measures:
+            - **Retrieval Hit@K**: Measures whether the ground-truth evidence excerpt appears in top-k candidate chunks for answerable queries.
+            - **Citation-ID Validity**: Validates that 100% of generated citations reference real retrieved chunk IDs from the active query evidence pack.
+            - **Abstention Accuracy**: Verifies that unanswerable queries (e.g. unmentioned fiscal years, non-existent branches) return `insufficient_evidence` instead of guessing.
+            - **Prompt Injection Defense**: Validates that system override commands and document-embedded instructions are neutralized as untrusted data.
+            """
+        )
+
+        if st.button("🚀 Run Live Evaluation Benchmark", type="primary", use_container_width=True):
+            progress_bar = st.progress(0.0)
+            status_box = st.empty()
+
+            def on_progress(current: int, total: int, res):
+                progress_bar.progress(current / total)
+                status_box.markdown(f"Evaluating `{res.case_id}` ({current}/{total}): **{res.question[:55]}...**")
+
+            with st.spinner("Executing benchmark across synthetic financial disclosures..."):
+                try:
+                    summary = eval_runner.run_evaluation(on_progress=on_progress)
+                    st.session_state["eval_summary"] = summary
+                    st.success("Benchmark completed successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Evaluation benchmark execution failed: {e}")
+    else:
+        # Display KPI Metric Cards
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-value">{eval_summary.overall_pass_rate * 100:.1f}%</div>
+                    <div class="metric-label">Overall Pass Rate</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col2:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-value">{eval_summary.retrieval_hit_rate * 100:.1f}%</div>
+                    <div class="metric-label">Retrieval Hit@K</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col3:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-value">{eval_summary.citation_validity_rate * 100:.1f}%</div>
+                    <div class="metric-label">Citation Validity</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col4:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-value">{eval_summary.abstention_rate * 100:.1f}%</div>
+                    <div class="metric-label">Abstention Accuracy</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col5:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-value">{eval_summary.injection_resistance_rate * 100:.1f}%</div>
+                    <div class="metric-label">Injection Defense</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        sub_col1, sub_col2, sub_col3 = st.columns([1, 1, 2])
+        with sub_col1:
+            st.write(f"**Passed Cases:** {eval_summary.passed_cases} / {eval_summary.total_cases}")
+        with sub_col2:
+            st.write(f"**Average Query Latency:** {eval_summary.avg_latency_ms:.1f} ms")
+        with sub_col3:
+            btn_col1, btn_col2, btn_col3 = st.columns(3)
+            with btn_col1:
+                if st.button("🔄 Rerun Benchmark", use_container_width=True):
+                    st.session_state["eval_summary"] = None
+                    st.rerun()
+            with btn_col2:
+                report_json = eval_summary.model_dump_json(indent=2)
+                st.download_button(
+                    label="📥 Export JSON",
+                    data=report_json,
+                    file_name="findoc_evaluation_report.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            with btn_col3:
+                report_md = export_evaluation_markdown(eval_summary)
+                st.download_button(
+                    label="📄 Export Markdown",
+                    data=report_md,
+                    file_name="findoc_evaluation_report.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
+
+        st.divider()
+
+        # Filter by category
+        categories = ["All"] + sorted(list({c.category for c in eval_summary.case_results}))
+        selected_cat = st.selectbox("Filter test cases by category:", categories, index=0)
+
+        filtered_cases = (
+            eval_summary.case_results
+            if selected_cat == "All"
+            else [c for c in eval_summary.case_results if c.category == selected_cat]
+        )
+
+        st.markdown(f"### Diagnostics Breakdown ({len(filtered_cases)} cases)")
+
+        for c in filtered_cases:
+            status_badge = (
+                '<span class="badge-pass">PASS</span>'
+                if c.passed
+                else '<span class="badge-fail">FAIL</span>'
+            )
+            hit_badge = "✅ Hit" if c.retrieval_hit else "❌ Miss"
+            cit_badge = "✅ Valid Citations" if c.citation_validity else "❌ Invalid Citation"
+            abs_badge = "✅ Abstention OK" if c.abstention_correct else "❌ Abstention Fail"
+            inj_badge = "✅ Protected" if c.injection_resistant else "❌ Injected"
+
+            with st.expander(f"{c.case_id} — {c.category.upper()} | {c.question[:65]}...", expanded=not c.passed):
+                header_cols = st.columns([1, 1, 1, 1, 1])
+                with header_cols[0]:
+                    st.markdown(f"**Outcome:** {status_badge}", unsafe_allow_html=True)
+                with header_cols[1]:
+                    st.write(f"**Retrieval:** {hit_badge}")
+                with header_cols[2]:
+                    st.write(f"**Citations:** {cit_badge}")
+                with header_cols[3]:
+                    st.write(f"**Abstention:** {abs_badge}")
+                with header_cols[4]:
+                    st.write(f"**Safety:** {inj_badge}")
+
+                st.write(f"**Question:** {c.question}")
+                st.write(f"**Expected Status:** `{c.expected_status}` | **Actual Status:** `{c.actual_status}` | **Latency:** `{c.latency_ms:.1f} ms`")
+                st.write(f"**Model Answer / Explanation:** {c.actual_answer}")
+                if c.notes:
+                    st.caption(f"**Benchmark Notes:** {c.notes}")
+
+        st.info(f"**Evaluation Methodology Notice:** {eval_summary.disclaimer}")
+
+# -------------------------------------------------------------
+# SCREEN 6: ABOUT & PRIVACY
 # -------------------------------------------------------------
 elif page == "About & Privacy":
+
     st.title("About FinDoc AI & Privacy Architecture")
     st.markdown(
         """

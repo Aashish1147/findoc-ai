@@ -38,3 +38,8 @@ class GenerationError(FinDocError):
 
 class InsufficientEvidenceError(FinDocError):
     """Raised or signaled when retrieved passages do not provide enough evidence to answer."""
+
+
+class EvaluationError(FinDocError):
+    """Raised when evaluation benchmark dataset cannot be loaded or executed."""
+

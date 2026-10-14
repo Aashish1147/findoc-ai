@@ -1,0 +1,50 @@
+================================================================================
+BEACON COMMERCIAL LENDING LTD. - UNDERWRITING POLICY & TERMS (2024)
+================================================================================
+
+SECTION 1: UNDERWRITING STANDARDS AND CREDIT CRITERIA
+Beacon Commercial Lending Ltd. originates secured commercial real estate and
+equipment loans across selected business sectors. Effective October 1, 2024,
+all credit facilities are governed by the following underwriting thresholds:
+- Minimum Borrower Credit Score: 680 FICO score for principal guarantors.
+  Guarantors with credit scores below 680 require secondary board approval.
+- Maximum Debt-to-Income (DTI) Ratio: 43.0% calculated on trailing twelve-month
+  verified cash flows.
+- Maximum Loan-to-Value (LTV) Ratio: 80.0% for stabilized owner-occupied
+  commercial real estate; 75.0% for non-owner occupied investment properties.
+- Minimum Debt Service Coverage Ratio (DSCR): 1.25x under primary stress scenarios.
+
+SECTION 2: LOAN PRICING, ORIGINATION FEES, AND PREPAYMENT TERMS
+Beacon structures pricing according to risk tier and facility duration:
+- Standard Loan Origination Fee: 1.50% of gross loan commitment amount, payable
+  at settlement.
+- Loan Documentation Fee: $750.00 flat fee charged at loan closing.
+- Environmental Assessment Review Fee: $1,200.00 where applicable.
+- Prepayment Penalty Structure:
+  * Repayment within Year 1 (Months 1-12): 2.0% penalty of outstanding principal.
+  * Repayment within Year 2 (Months 13-24): 1.0% penalty of outstanding principal.
+  * Repayment after 24 Months: 0.0% penalty (no prepayment penalty applies after
+    the completion of month 24).
+
+SECTION 3: FACILITY SIZES AND AMORTIZATION GUIDELINES
+Beacon provides debt capital within structured boundaries:
+- Minimum Commercial Facility: $250,000.00.
+- Maximum Single-Borrower Facility: $15,000,000.00.
+- Maximum Amortization Period: 25 years with a mandatory 10-year balloon maturity
+  or refinancing checkpoint.
+- Interest Rate Basis: Floating rate indexed to 30-Day Average SOFR plus a margin
+  ranging from 2.75% to 4.50% depending on risk tier.
+
+SECTION 4: PROHIBITED COLLATERAL AND LENDING RESTRICTIONS
+To preserve asset quality and comply with internal credit charters, Beacon
+Commercial Lending strictly prohibits lending against the following assets:
+- Speculative undeveloped raw land lacking municipal zoning or utilities.
+- Cannabis-related enterprises, dispensaries, or cultivation facilities.
+- Single-purpose entertainment or casino gaming establishments.
+- Residential multi-family properties exceeding 4 units (covered by separate
+  multi-family affiliate).
+
+SECTION 5: NOTICES AND REGULATORY DISCLAIMER
+Beacon Commercial Lending is an equal opportunity commercial lender. All terms
+and rate commitments are subject to credit committee ratification and formal
+closing documentation.

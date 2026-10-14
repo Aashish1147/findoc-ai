@@ -161,3 +161,117 @@ class ComparisonResult(BaseModel):
         default_factory=list,
         description="Overall caveats, e.g. notice that comparison is an assistive reading aid",
     )
+
+
+class EvalTestCase(BaseModel):
+    """A single labelled test case in the synthetic evaluation benchmark."""
+
+    model_config = ConfigDict(frozen=True)
+
+    case_id: str = Field(..., description="Unique test case identifier (e.g. 'EVAL-001')")
+    category: str = Field(
+        ...,
+        description="Category: direct_lookup, paraphrase, negative_exception, unanswerable, prompt_injection, etc.",
+    )
+    question: str = Field(..., min_length=1, description="Evaluation prompt or question")
+    target_document_names: list[str] = Field(
+        ...,
+        min_length=1,
+        description="Filenames of target documents required for answering",
+    )
+    expected_status: AnswerStatus = Field(..., description="Expected status: 'answered' or 'insufficient_evidence'")
+    expected_page: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Expected 1-based page number containing the evidence, if known",
+    )
+    expected_evidence_marker: Optional[str] = Field(
+        default=None,
+        description="Text substring expected in at least one retrieved chunk for hit@k evaluation",
+    )
+    expected_answer_keywords: list[str] = Field(
+        default_factory=list,
+        description="Keywords or values expected in grounded answer",
+    )
+    notes: str = Field(default="", description="Explanatory notes regarding the test case")
+
+
+class EvalCaseResult(BaseModel):
+    """Outcome and diagnostics for a single evaluation test case."""
+
+    model_config = ConfigDict(frozen=True)
+
+    case_id: str = Field(..., description="Unique test case identifier")
+    category: str = Field(..., description="Evaluation category")
+    question: str = Field(..., description="Question evaluated")
+    expected_status: AnswerStatus = Field(..., description="Expected status")
+    actual_status: AnswerStatus = Field(..., description="Observed status")
+    retrieval_hit: bool = Field(
+        ...,
+        description="Whether expected evidence was retrieved in top-k (or True if unanswerable)",
+    )
+    citation_validity: bool = Field(
+        ...,
+        description="Whether all returned citations correspond to verified backend chunk IDs",
+    )
+    abstention_correct: bool = Field(
+        ...,
+        description="Whether system correctly abstained if unanswerable, or answered if answerable",
+    )
+    injection_resistant: bool = Field(
+        ...,
+        description="Whether system safely resisted prompt injection attempt",
+    )
+    passed: bool = Field(
+        ...,
+        description="Whether the test case satisfied all grounding, citation, and abstention criteria",
+    )
+    latency_ms: float = Field(..., ge=0.0, description="Execution time in milliseconds")
+    actual_answer: str = Field(default="", description="Synthesized answer text or abstention message")
+    citation_count: int = Field(default=0, ge=0, description="Number of valid citations returned")
+    retrieved_chunk_count: int = Field(default=0, ge=0, description="Total chunks retrieved")
+    notes: str = Field(default="", description="Diagnostic notes or error observations")
+
+
+class EvalSummary(BaseModel):
+    """Aggregate benchmark results and quality diagnostics."""
+
+    model_config = ConfigDict(frozen=True)
+
+    total_cases: int = Field(..., ge=0, description="Total number of evaluated test cases")
+    passed_cases: int = Field(..., ge=0, description="Number of test cases meeting all criteria")
+    overall_pass_rate: float = Field(..., ge=0.0, le=1.0, description="Overall benchmark pass rate")
+    retrieval_hit_rate: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Retrieval Hit@K rate across answerable cases with labelled evidence",
+    )
+    citation_validity_rate: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of citations referencing valid retrieved chunk IDs",
+    )
+    abstention_rate: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Abstention accuracy across unanswerable test cases",
+    )
+    injection_resistance_rate: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Resistance rate across prompt injection attempts",
+    )
+    avg_latency_ms: float = Field(..., ge=0.0, description="Average execution latency per query in milliseconds")
+    case_results: list[EvalCaseResult] = Field(
+        default_factory=list,
+        description="Individual test case outcomes",
+    )
+    disclaimer: str = Field(
+        default="Synthetic benchmark evaluates retrieval recall, citation-ID integrity, and explicit abstention. It does not replace human domain review for semantic correctness.",
+        description="Mandatory evaluation disclaimer",
+    )
+

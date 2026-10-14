@@ -156,6 +156,41 @@ class ChromaVectorStore:
         except Exception as e:
             raise StorageError(f"Chroma similarity search failed: {e}") from e
 
+    def get_chunks_by_ids(self, chunk_ids: List[str]) -> List[ChunkRecord]:
+        """Retrieve chunk records by their unique chunk IDs."""
+        if not chunk_ids:
+            return []
+        try:
+            results = self._collection.get(
+                ids=chunk_ids,
+                include=["documents", "metadatas"],
+            )
+            chunks: List[ChunkRecord] = []
+            res_ids = results.get("ids", [])
+            res_docs = results.get("documents", [])
+            res_metas = results.get("metadatas", [])
+
+            for i, chunk_id in enumerate(res_ids):
+                meta = res_metas[i] if i < len(res_metas) else {}
+                doc_text = res_docs[i] if i < len(res_docs) else ""
+                raw_page = meta.get("page_number", -1)
+                page_number = None if raw_page == -1 else int(raw_page)
+
+                chunks.append(
+                    ChunkRecord(
+                        chunk_id=chunk_id,
+                        document_id=str(meta.get("document_id", "")),
+                        source_name=str(meta.get("source_name", "")),
+                        page_number=page_number,
+                        chunk_index=int(meta.get("chunk_index", 0)),
+                        text=doc_text,
+                        content_hash=str(meta.get("content_hash", "")),
+                    )
+                )
+            return chunks
+        except Exception as e:
+            raise StorageError(f"Failed to get chunks by IDs: {e}") from e
+
     def delete_document(self, document_id: str) -> None:
         """Delete all chunks belonging to a document ID from the vector store."""
         try:
