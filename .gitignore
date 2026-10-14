@@ -1,0 +1,31 @@
+# Python environment and bytecode
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# FinDoc AI Local runtime storage (vector indices, sqlite DBs, uploads)
+data/chroma/
+data/*.sqlite
+data/*.db
+data/uploads/
+
+# IDE and OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
