@@ -300,9 +300,11 @@ class GeminiLLMProvider(BaseLLMProvider):
         import urllib.error
         import time
 
-        # Model fallback chain: try configured model first, then free-tier safe fallbacks
-        _FALLBACK_CHAIN = ["gemini-1.5-flash", "gemini-1.5-flash-8b"]
+        # Only use models confirmed to work on free-tier API keys.
+        # gemini-1.5-flash is the primary; gemini-1.5-pro is the sole fallback.
+        _FALLBACK_CHAIN = ["gemini-1.5-flash", "gemini-1.5-pro"]
         models_to_try = [self.model_name] + [m for m in _FALLBACK_CHAIN if m != self.model_name]
+        all_gave_404 = True  # track if every model returned 404 (= bad API key)
 
         def _call_model(name: str) -> str:
             url = (
@@ -336,41 +338,62 @@ class GeminiLLMProvider(BaseLLMProvider):
 
         last_error: Exception = GenerationError("No models available.")
         for model in models_to_try:
-            # Retry up to 3 times with exponential backoff for transient overload errors
             for attempt in range(3):
                 try:
-                    return _call_model(model)
+                    result = _call_model(model)
+                    all_gave_404 = False
+                    return result
                 except urllib.error.HTTPError as e:
                     err_body = e.read().decode("utf-8", errors="replace")
                     if e.code in (429, 503):
-                        # Transient overload / rate-limit – wait and retry
+                        all_gave_404 = False
                         wait = 2 ** attempt  # 1s, 2s, 4s
                         time.sleep(wait)
                         last_error = GenerationError(
-                            f"Gemini API overloaded (HTTP {e.code}) on {model}, "
-                            f"attempt {attempt + 1}/3. Retrying…"
+                            f"Gemini API is overloaded (HTTP {e.code}). "
+                            f"Attempt {attempt + 1}/3 on {model}. Retrying…"
                         )
                         continue
                     elif e.code == 404:
-                        # Model not found – skip straight to next fallback
+                        # Model not found – try next in chain
                         last_error = GenerationError(
-                            f"Model {model!r} not found (HTTP 404). Trying next fallback."
+                            f"Gemini model '{model}' not found (HTTP 404)."
                         )
-                        break  # break retry loop, try next model
+                        break
+                    elif e.code == 400:
+                        all_gave_404 = False
+                        raise GenerationError(
+                            f"Gemini API bad request (HTTP 400): {err_body[:300]}"
+                        ) from e
+                    elif e.code == 403:
+                        all_gave_404 = False
+                        raise GenerationError(
+                            "Gemini API key is invalid or does not have permission. "
+                            "Get a free key at https://aistudio.google.com/app/apikey "
+                            "and set it as GEMINI_API_KEY in Streamlit Cloud secrets."
+                        ) from e
                     else:
-                        # Non-retryable HTTP error
+                        all_gave_404 = False
                         raise GenerationError(
                             f"Gemini API HTTP {e.code} error: {err_body[:300]}"
                         ) from e
                 except GenerationError:
                     raise
-                except Exception as e:
-                    raise GenerationError(f"Failed to call Gemini provider: {e}") from e
-            else:
-                # Exhausted all retries for this model – try next in chain
-                pass
+                except Exception as exc:
+                    all_gave_404 = False
+                    raise GenerationError(f"Failed to call Gemini provider: {exc}") from exc
+            # End of retry loop for this model
 
+        # If every model returned 404, the API key is the problem, not the model name
+        if all_gave_404:
+            raise GenerationError(
+                "All Gemini models returned HTTP 404. This usually means your GEMINI_API_KEY "
+                "is invalid or is not a Google AI Studio key. "
+                "Get a free key at https://aistudio.google.com/app/apikey and set it as "
+                "GEMINI_API_KEY in your Streamlit Cloud secrets, then reboot the app."
+            )
         raise last_error
+
 
 
 def get_llm_provider(
