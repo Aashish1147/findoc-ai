@@ -6,6 +6,13 @@ grounded question answering, and verifiable page-level citations.
 
 import json
 from pathlib import Path
+import sys
+
+# Ensure 'src' directory is on sys.path for Streamlit Cloud and local runs without PYTHONPATH
+_SRC_DIR = Path(__file__).resolve().parent / "src"
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 import streamlit as st
 
 from findoc.comparison.service import ComparisonService
