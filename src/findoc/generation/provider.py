@@ -52,6 +52,71 @@ class MockLLMProvider(BaseLLMProvider):
                 }
             )
 
+        # Handle two-document comparison mode
+        if "comparing two user-provided documents" in system_instruction.lower() or "--- DOCUMENT A EVIDENCE:" in user_prompt:
+            has_a = "NO EVIDENCE AVAILABLE" not in user_prompt.split("--- DOCUMENT B EVIDENCE:")[0]
+            has_b = len(user_prompt.split("--- DOCUMENT B EVIDENCE:")) > 1 and "NO EVIDENCE AVAILABLE" not in user_prompt.split("--- DOCUMENT B EVIDENCE:")[1]
+
+            if not has_a and not has_b:
+                return json.dumps(
+                    {
+                        "status": "insufficient_evidence",
+                        "findings": [],
+                        "limitations": ["[MOCK MODE] Neither document contained matching evidence."],
+                    }
+                )
+            elif has_a and not has_b:
+                return json.dumps(
+                    {
+                        "status": "partial_evidence",
+                        "findings": [
+                            {
+                                "category": "only_in_a",
+                                "topic": "Terms and Conditions",
+                                "summary": "[MOCK] Term found in retrieved evidence from Document A, but not found in retrieved passages from Document B.",
+                                "evidence_a": ["A1"],
+                                "evidence_b": [],
+                                "caveat": "Absence in retrieved evidence from B does not prove absence from entire document.",
+                            }
+                        ],
+                        "limitations": ["[MOCK MODE] Document B lacked relevant candidate passages."],
+                    }
+                )
+            elif not has_a and has_b:
+                return json.dumps(
+                    {
+                        "status": "partial_evidence",
+                        "findings": [
+                            {
+                                "category": "only_in_b",
+                                "topic": "Terms and Conditions",
+                                "summary": "[MOCK] Term found in retrieved evidence from Document B, but not found in retrieved passages from Document A.",
+                                "evidence_a": [],
+                                "evidence_b": ["B1"],
+                                "caveat": "Absence in retrieved evidence from A does not prove absence from entire document.",
+                            }
+                        ],
+                        "limitations": ["[MOCK MODE] Document A lacked relevant candidate passages."],
+                    }
+                )
+            else:
+                return json.dumps(
+                    {
+                        "status": "complete",
+                        "findings": [
+                            {
+                                "category": "different",
+                                "topic": "Term Comparison",
+                                "summary": "[MOCK] Document A specifies different conditions than Document B based on retrieved passages.",
+                                "evidence_a": ["A1"],
+                                "evidence_b": ["B1"],
+                                "caveat": None,
+                            }
+                        ],
+                        "limitations": ["[MOCK MODE] Deterministic comparison generated for local demonstration."],
+                    }
+                )
+
         # Check for prompt injection in evidence and safely neutralize it
         if "ignore previous directions" in user_prompt.lower() or "reveal secrets" in user_prompt.lower():
             return json.dumps(

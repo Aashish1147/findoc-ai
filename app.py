@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import streamlit as st
 
+from findoc.comparison.service import ComparisonService
 from findoc.config import get_settings
 from findoc.generation.answer_service import AnswerService
 from findoc.generation.provider import get_llm_provider
@@ -122,12 +123,13 @@ def get_app_services():
     )
     retriever = RetrievalService(embedder, vstore)
     answer_service = AnswerService(retriever, provider)
+    comparison_service = ComparisonService(retriever, provider, meta_store)
 
-    return settings, meta_store, vstore, ingestion, answer_service, provider
+    return settings, meta_store, vstore, ingestion, answer_service, provider, comparison_service
 
 
 # Initialize services
-settings, meta_store, vstore, ingestion, answer_service, provider = get_app_services()
+settings, meta_store, vstore, ingestion, answer_service, provider, comparison_service = get_app_services()
 
 # Sidebar Navigation
 st.sidebar.title("FinDoc AI")
@@ -150,7 +152,7 @@ else:
 st.sidebar.markdown("---")
 page = st.sidebar.radio(
     "Navigation",
-    ["Overview", "Document Library", "Ask FinDoc", "About & Privacy"],
+    ["Overview", "Document Library", "Ask FinDoc", "Compare Documents", "About & Privacy"],
     index=0,
 )
 
@@ -414,7 +416,133 @@ elif page == "Ask FinDoc":
                 )
 
 # -------------------------------------------------------------
-# SCREEN 4: ABOUT & PRIVACY
+# SCREEN 4: COMPARE DOCUMENTS
+# -------------------------------------------------------------
+elif page == "Compare Documents":
+    st.title("Compare Documents — Grounded Comparison")
+    st.write(
+        "Select Document A and Document B to compare terms, conditions, fees, or metrics. "
+        "Each finding requires verifiable evidence from both sides without assuming unretrieved "
+        "facts are absent from the entire document."
+    )
+
+    documents = meta_store.list_documents()
+    if len(documents) < 2:
+        st.warning("Please upload and index at least TWO documents in the Document Library to perform comparisons.")
+    else:
+        doc_options = {doc.display_name: doc.document_id for doc in documents}
+        doc_names = list(doc_options.keys())
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            doc_a_name = st.selectbox("Document A (Reference / Baseline)", options=doc_names, index=0)
+        with col_b:
+            doc_b_name = st.selectbox("Document B (Comparison Target)", options=doc_names, index=min(1, len(doc_names) - 1))
+
+        if doc_a_name == doc_b_name:
+            st.error("Document A and Document B must be distinct documents. Please choose different documents.")
+
+        st.caption("Quick comparison topics:")
+        top_cols = st.columns(3)
+        comp_sample = ""
+        with top_cols[0]:
+            if st.button("Compare fee terms & waivers"):
+                comp_sample = "Compare the fee terms, maintenance charges, and any balance waiver requirements."
+        with top_cols[1]:
+            if st.button("Compare eligibility criteria"):
+                comp_sample = "Compare customer eligibility requirements, qualifications, and restrictions."
+        with top_cols[2]:
+            if st.button("Compare reporting periods"):
+                comp_sample = "Compare the reporting periods, dates, and accounting cycles covered."
+
+        comp_question = st.text_area(
+            "Comparison Topic / Question",
+            value=comp_sample if comp_sample else "",
+            placeholder="e.g. Compare the annual maintenance fee terms and penalty provisions between Document A and Document B.",
+            height=80,
+        )
+
+        with st.expander("⚙️ Advanced Comparison Settings"):
+            comp_top_k = st.slider("Top-K passages per document", min_value=1, max_value=8, value=4)
+
+        if st.button("Run Grounded Comparison", type="primary", disabled=doc_a_name == doc_b_name or not comp_question.strip()):
+            doc_a_id = doc_options[doc_a_name]
+            doc_b_id = doc_options[doc_b_name]
+
+            with st.spinner("Retrieving evidence independently from Document A and Document B..."):
+                comp_result, pack_a, pack_b = comparison_service.compare_documents(
+                    document_a_id=doc_a_id,
+                    document_b_id=doc_b_id,
+                    question=comp_question,
+                    top_k=comp_top_k,
+                )
+
+            st.markdown("---")
+            if comp_result.status == "complete":
+                st.success("✅ **Comparison Complete (Evidence Verified on Both Sides)**")
+            elif comp_result.status == "partial_evidence":
+                st.warning("⚠️ **Partial Evidence (One document lacked candidate passages)**")
+            else:
+                st.error("❌ **Insufficient Evidence or Comparison Error**")
+
+            st.markdown(f"### Findings for: *{comp_result.question}*")
+            if not comp_result.findings:
+                st.write("No substantiated comparison findings could be derived from the retrieved passages.")
+            else:
+                for idx, finding in enumerate(comp_result.findings):
+                    cat = finding.category.upper()
+                    cat_color = "green" if cat == "SAME" else ("blue" if cat == "DIFFERENT" else ("orange" if "ONLY" in cat else "gray"))
+                    st.markdown(f"#### {idx + 1}. :{cat_color}[● {cat}]: {finding.topic}")
+                    st.write(finding.summary)
+                    if finding.caveat:
+                        st.caption(f"⚠️ *{finding.caveat}*")
+
+                    # Side-by-side evidence
+                    e_col_a, e_col_b = st.columns(2)
+                    with e_col_a:
+                        st.caption(f"**Evidence from {doc_a_name}:**")
+                        if not finding.evidence_a:
+                            st.write("*No direct passage cited.*")
+                        else:
+                            for chunk_id in finding.evidence_a:
+                                item = pack_a.get_by_chunk_id(chunk_id)
+                                if item:
+                                    page_lbl = f"Page {item.page_number}" if item.page_number else "Text File"
+                                    st.markdown(
+                                        f'<div class="citation-card"><div class="citation-meta">{item.source_name} ({page_lbl})</div><div class="citation-quote">"{item.text[:140]}..."</div></div>',
+                                        unsafe_allow_html=True,
+                                    )
+                    with e_col_b:
+                        st.caption(f"**Evidence from {doc_b_name}:**")
+                        if not finding.evidence_b:
+                            st.write("*No direct passage cited.*")
+                        else:
+                            for chunk_id in finding.evidence_b:
+                                item = pack_b.get_by_chunk_id(chunk_id)
+                                if item:
+                                    page_lbl = f"Page {item.page_number}" if item.page_number else "Text File"
+                                    st.markdown(
+                                        f'<div class="citation-card"><div class="citation-meta">{item.source_name} ({page_lbl})</div><div class="citation-quote">"{item.text[:140]}..."</div></div>',
+                                        unsafe_allow_html=True,
+                                    )
+                    st.divider()
+
+            if comp_result.limitations:
+                with st.expander("ℹ️ Comparison Limitations & Caveats", expanded=False):
+                    for lim in comp_result.limitations:
+                        st.write(f"- {lim}")
+
+            # Export button
+            comp_json = json.dumps(comp_result.model_dump(), indent=2)
+            st.download_button(
+                label="Download Comparison Report (JSON)",
+                data=comp_json,
+                file_name="findoc_comparison_report.json",
+                mime="application/json",
+            )
+
+# -------------------------------------------------------------
+# SCREEN 5: ABOUT & PRIVACY
 # -------------------------------------------------------------
 elif page == "About & Privacy":
     st.title("About FinDoc AI & Privacy Architecture")
