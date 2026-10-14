@@ -18,6 +18,7 @@ from findoc.evaluation.runner import (
 from findoc.generation.answer_service import AnswerService
 from findoc.generation.provider import get_llm_provider
 from findoc.ingestion.service import IngestionService
+from findoc.reporting import export_answer_markdown, export_comparison_markdown
 from findoc.retrieval.retriever import RetrievalService
 from findoc.schemas import EvalSummary
 from findoc.storage.embeddings import get_embedding_service
@@ -447,14 +448,24 @@ elif page == "Ask FinDoc":
 
             # Export Report
             st.markdown("---")
-            col_exp1, col_exp2 = st.columns([1, 4])
+            col_exp1, col_exp2, _ = st.columns([1, 1, 3])
             with col_exp1:
                 export_json = json.dumps(result.model_dump(), indent=2)
                 st.download_button(
-                    label="Download JSON Report",
+                    label="📥 Download JSON",
                     data=export_json,
                     file_name="findoc_answer_report.json",
                     mime="application/json",
+                    use_container_width=True,
+                )
+            with col_exp2:
+                export_md = export_answer_markdown(user_question, result)
+                st.download_button(
+                    label="📄 Download Markdown",
+                    data=export_md,
+                    file_name="findoc_answer_report.md",
+                    mime="text/markdown",
+                    use_container_width=True,
                 )
 
 # -------------------------------------------------------------
@@ -575,13 +586,27 @@ elif page == "Compare Documents":
                         st.write(f"- {lim}")
 
             # Export button
-            comp_json = json.dumps(comp_result.model_dump(), indent=2)
-            st.download_button(
-                label="Download Comparison Report (JSON)",
-                data=comp_json,
-                file_name="findoc_comparison_report.json",
-                mime="application/json",
-            )
+            col_comp_exp1, col_comp_exp2, _ = st.columns([1, 1, 3])
+            with col_comp_exp1:
+                comp_json = json.dumps(comp_result.model_dump(), indent=2)
+                st.download_button(
+                    label="📥 Export JSON",
+                    data=comp_json,
+                    file_name="findoc_comparison_report.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            with col_comp_exp2:
+                name_a = meta_store.get_document(doc_a_id).display_name if meta_store.get_document(doc_a_id) else doc_a_id
+                name_b = meta_store.get_document(doc_b_id).display_name if meta_store.get_document(doc_b_id) else doc_b_id
+                comp_md = export_comparison_markdown(comp_result, name_a, name_b)
+                st.download_button(
+                    label="📄 Export Markdown",
+                    data=comp_md,
+                    file_name="findoc_comparison_report.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
 
 # -------------------------------------------------------------
 # SCREEN 5: EVALUATION & DIAGNOSTICS
