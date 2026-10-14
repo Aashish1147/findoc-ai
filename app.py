@@ -145,6 +145,11 @@ def get_app_services():
         model_name=settings.embedding_model_name,
         mock=False,
     )
+    # Warm up embedding model at startup so user interactions never stall or drop WebSocket connection
+    try:
+        embedder.embed_query("FinDoc startup warmup")
+    except Exception:
+        pass
     provider = get_llm_provider(
         provider_name=settings.llm_provider,
         api_key=settings.gemini_api_key,

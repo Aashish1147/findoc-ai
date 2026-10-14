@@ -17,7 +17,7 @@ class MetadataStore:
     """Thread-safe SQLite store for DocumentRecord metadata."""
 
     def __init__(self, db_path: Path) -> None:
-        self.db_path = db_path
+        self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 

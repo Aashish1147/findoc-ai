@@ -21,7 +21,7 @@ class ChromaVectorStore:
         persist_dir: Path,
         collection_name: str = "findoc_chunks",
     ) -> None:
-        self.persist_dir = persist_dir
+        self.persist_dir = Path(persist_dir)
         self.collection_name = collection_name
         self.persist_dir.mkdir(parents=True, exist_ok=True)
         self._init_client()
