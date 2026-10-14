@@ -183,8 +183,20 @@ def get_app_services():
     return settings, meta_store, vstore, ingestion, answer_service, provider, comparison_service, eval_runner
 
 
-# Initialize services
-settings, meta_store, vstore, ingestion, answer_service, provider, comparison_service, eval_runner = get_app_services()
+# Initialize services – wrap so bad Streamlit Cloud secrets show a clear message.
+try:
+    settings, meta_store, vstore, ingestion, answer_service, provider, comparison_service, eval_runner = get_app_services()
+except Exception as _init_err:
+    st.error(
+        f"⚙️ **App configuration error** – could not start FinDoc AI.\n\n"
+        f"```\n{_init_err}\n```\n\n"
+        "**Common fixes on Streamlit Cloud:**\n"
+        "- Set `LLM_PROVIDER` to `mock` or `gemini` (lowercase)\n"
+        "- Set `LLM_MODEL` to `gemini-2.0-flash`\n"
+        "- If `LLM_PROVIDER = gemini`, also set `GEMINI_API_KEY`\n\n"
+        "Go to **Manage app → Settings → Secrets** to update."
+    )
+    st.stop()
 
 # Sidebar Navigation
 st.sidebar.title("FinDoc AI")

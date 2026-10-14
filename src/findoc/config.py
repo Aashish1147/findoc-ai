@@ -28,6 +28,24 @@ class Settings(BaseSettings):
         description="Configured LLM model identifier (e.g. gemini-2.0-flash, gemini-1.5-flash)",
     )
 
+    @field_validator("llm_provider", mode="before")
+    @classmethod
+    def normalize_llm_provider(cls, v: object) -> str:
+        """Lowercase the provider value so 'Gemini' / 'GEMINI' pass the Literal check."""
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v  # let Pydantic raise the type error
+
+    @field_validator("llm_model", mode="before")
+    @classmethod
+    def normalize_llm_model(cls, v: object) -> str:
+        """Strip whitespace and normalise deprecated model names."""
+        if isinstance(v, str):
+            v = v.strip()
+            if "2.5" in v:
+                return "gemini-2.0-flash"
+        return v  # type: ignore[return-value]
+
     # Local Storage Paths
     findoc_data_dir: Path = Field(
         default=Path("./data"),
@@ -132,5 +150,7 @@ def get_settings(**kwargs) -> Settings:
     """Helper to instantiate validated application settings."""
     try:
         return Settings(**kwargs)
-    except ValueError as e:
+    except Exception as e:
+        # Pydantic v2 raises ValidationError (not a subclass of ValueError).
+        # Catch broadly here so ConfigurationError is always what surfaces.
         raise ConfigurationError(f"Configuration validation failed: {e}") from e
