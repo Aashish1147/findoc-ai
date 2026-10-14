@@ -24,8 +24,8 @@ class Settings(BaseSettings):
         description="Google Gemini API key. Required only when llm_provider='gemini'",
     )
     llm_model: str = Field(
-        default="gemini-2.5-flash",
-        description="Configured LLM model identifier",
+        default="gemini-1.5-flash",
+        description="Configured LLM model identifier (e.g. gemini-1.5-flash, gemini-2.0-flash)",
     )
 
     # Local Storage Paths

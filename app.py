@@ -389,39 +389,59 @@ elif page == "Ask FinDoc":
 
         selected_ids = [doc_options[name] for name in selected_names]
 
+        # Session state initialization for Q&A
+        if "qa_query_text" not in st.session_state:
+            st.session_state["qa_query_text"] = ""
+        if "qa_last_result" not in st.session_state:
+            st.session_state["qa_last_result"] = None
+        if "qa_last_question" not in st.session_state:
+            st.session_state["qa_last_question"] = ""
+
         # Sample question shortcuts
         st.caption("Quick example questions:")
         q_cols = st.columns(3)
-        sample_q = ""
         with q_cols[0]:
-            if st.button("What fees are described?"):
-                sample_q = "What fees or charges are described in the document?"
+            if st.button("What fees are described?", use_container_width=True):
+                st.session_state["qa_query_text"] = "What fees or charges are described in the document?"
+                st.rerun()
         with q_cols[1]:
-            if st.button("What is the stated revenue?"):
-                sample_q = "What revenue or income figures are stated in the document?"
+            if st.button("What is the stated revenue?", use_container_width=True):
+                st.session_state["qa_query_text"] = "What revenue or income figures are stated in the document?"
+                st.rerun()
         with q_cols[2]:
-            if st.button("Unanswerable: 2035 forecast?"):
-                sample_q = "What is the company's projected revenue for 2035?"
+            if st.button("Unanswerable: 2035 forecast?", use_container_width=True):
+                st.session_state["qa_query_text"] = "What is the company's projected revenue for 2035?"
+                st.rerun()
 
         user_question = st.text_area(
             "Your Question",
-            value=sample_q if sample_q else "",
+            value=st.session_state["qa_query_text"],
             placeholder="e.g. What is the annual maintenance fee, and what conditions apply?",
             height=90,
+            key="qa_user_input",
         )
+        st.session_state["qa_query_text"] = user_question
 
         with st.expander("⚙️ Advanced Retrieval Settings"):
             top_k = st.slider("Top-K Passages to Retrieve", min_value=1, max_value=10, value=5)
             show_debug = st.checkbox("Show diagnostic chunk IDs and search scores", value=False)
 
-        if st.button("Submit Question", type="primary", disabled=not selected_ids or not user_question.strip()):
+        submit_disabled = not selected_ids or not user_question.strip()
+        if st.button("Submit Question", type="primary", disabled=submit_disabled):
             with st.spinner("Retrieving evidence and synthesizing grounded answer..."):
-                result = answer_service.answer_question(
+                ans_res = answer_service.answer_question(
                     question=user_question,
                     document_ids=selected_ids,
                     top_k=top_k,
                 )
+                st.session_state["qa_last_result"] = ans_res
+                st.session_state["qa_last_question"] = user_question
 
+        # Render persisted result
+        result = st.session_state.get("qa_last_result")
+        active_question = st.session_state.get("qa_last_question", user_question)
+
+        if result is not None:
             st.markdown("---")
             # Answer status banner
             if result.status == "answered":
@@ -471,7 +491,7 @@ elif page == "Ask FinDoc":
                     use_container_width=True,
                 )
             with col_exp2:
-                export_md = export_answer_markdown(user_question, result)
+                export_md = export_answer_markdown(active_question, result)
                 st.download_button(
                     label="📄 Download Markdown",
                     data=export_md,
@@ -507,30 +527,41 @@ elif page == "Compare Documents":
         if doc_a_name == doc_b_name:
             st.error("Document A and Document B must be distinct documents. Please choose different documents.")
 
+        # Session state initialization for Comparison
+        if "comp_query_text" not in st.session_state:
+            st.session_state["comp_query_text"] = ""
+        if "comp_last_bundle" not in st.session_state:
+            st.session_state["comp_last_bundle"] = None
+
         st.caption("Quick comparison topics:")
         top_cols = st.columns(3)
-        comp_sample = ""
         with top_cols[0]:
-            if st.button("Compare fee terms & waivers"):
-                comp_sample = "Compare the fee terms, maintenance charges, and any balance waiver requirements."
+            if st.button("Compare fee terms & waivers", use_container_width=True):
+                st.session_state["comp_query_text"] = "Compare the fee terms, maintenance charges, and any balance waiver requirements."
+                st.rerun()
         with top_cols[1]:
-            if st.button("Compare eligibility criteria"):
-                comp_sample = "Compare customer eligibility requirements, qualifications, and restrictions."
+            if st.button("Compare eligibility criteria", use_container_width=True):
+                st.session_state["comp_query_text"] = "Compare customer eligibility requirements, qualifications, and restrictions."
+                st.rerun()
         with top_cols[2]:
-            if st.button("Compare reporting periods"):
-                comp_sample = "Compare the reporting periods, dates, and accounting cycles covered."
+            if st.button("Compare reporting periods", use_container_width=True):
+                st.session_state["comp_query_text"] = "Compare the reporting periods, dates, and accounting cycles covered."
+                st.rerun()
 
         comp_question = st.text_area(
             "Comparison Topic / Question",
-            value=comp_sample if comp_sample else "",
+            value=st.session_state["comp_query_text"],
             placeholder="e.g. Compare the annual maintenance fee terms and penalty provisions between Document A and Document B.",
             height=80,
+            key="comp_user_input",
         )
+        st.session_state["comp_query_text"] = comp_question
 
         with st.expander("⚙️ Advanced Comparison Settings"):
             comp_top_k = st.slider("Top-K passages per document", min_value=1, max_value=8, value=4)
 
-        if st.button("Run Grounded Comparison", type="primary", disabled=doc_a_name == doc_b_name or not comp_question.strip()):
+        comp_disabled = doc_a_name == doc_b_name or not comp_question.strip()
+        if st.button("Run Grounded Comparison", type="primary", disabled=comp_disabled):
             doc_a_id = doc_options[doc_a_name]
             doc_b_id = doc_options[doc_b_name]
 
@@ -541,7 +572,11 @@ elif page == "Compare Documents":
                     question=comp_question,
                     top_k=comp_top_k,
                 )
+                st.session_state["comp_last_bundle"] = (comp_result, pack_a, pack_b, doc_a_id, doc_b_id, doc_a_name, doc_b_name)
 
+        comp_bundle = st.session_state.get("comp_last_bundle")
+        if comp_bundle is not None:
+            comp_result, pack_a, pack_b, doc_a_id, doc_b_id, doc_a_name, doc_b_name = comp_bundle
             st.markdown("---")
             if comp_result.status == "complete":
                 st.success("✅ **Comparison Complete (Evidence Verified on Both Sides)**")

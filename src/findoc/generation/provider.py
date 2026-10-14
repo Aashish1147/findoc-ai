@@ -278,12 +278,16 @@ class GeminiLLMProvider(BaseLLMProvider):
     def __init__(
         self,
         api_key: str,
-        model_name: str = "gemini-2.5-flash",
+        model_name: str = "gemini-1.5-flash",
     ) -> None:
         if not api_key:
             raise ConfigurationError("GEMINI_API_KEY must be provided for GeminiLLMProvider.")
         self.api_key = api_key
-        self.model_name = model_name
+        # Auto-normalize unsupported or non-existent model names like gemini-2.5-flash
+        normalized = (model_name or "gemini-1.5-flash").strip()
+        if "2.5" in normalized:
+            normalized = "gemini-1.5-flash"
+        self.model_name = normalized
 
     @property
     def model_mode(self) -> str:
@@ -294,33 +298,30 @@ class GeminiLLMProvider(BaseLLMProvider):
         import urllib.request
         import urllib.error
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={self.api_key}"
-
-        payload: Dict[str, Any] = {
-            "system_instruction": {
-                "parts": [{"text": system_instruction}]
-            },
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": user_prompt}],
-                }
-            ],
-            "generationConfig": {
-                "response_mime_type": "application/json",
-                "temperature": 0.0,
-            },
-        }
-
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-
-        try:
+        def _call_model(name: str) -> str:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{name}:generateContent?key={self.api_key}"
+            payload: Dict[str, Any] = {
+                "system_instruction": {
+                    "parts": [{"text": system_instruction}]
+                },
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": user_prompt}],
+                    }
+                ],
+                "generationConfig": {
+                    "response_mime_type": "application/json",
+                    "temperature": 0.0,
+                },
+            }
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
             with urllib.request.urlopen(req, timeout=30.0) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
                 candidates = result.get("candidates", [])
@@ -330,8 +331,17 @@ class GeminiLLMProvider(BaseLLMProvider):
                 if not content_parts or "text" not in content_parts[0]:
                     raise GenerationError("Malformed candidate content structure from Gemini API.")
                 return content_parts[0]["text"]
+
+        try:
+            return _call_model(self.model_name)
         except urllib.error.HTTPError as e:
             err_body = e.read().decode("utf-8", errors="replace")
+            # If 404 model not found and we didn't use gemini-1.5-flash, fallback to gemini-1.5-flash
+            if e.code == 404 and self.model_name != "gemini-1.5-flash":
+                try:
+                    return _call_model("gemini-1.5-flash")
+                except Exception:
+                    pass
             # Do NOT log or expose the API key in the error message
             raise GenerationError(f"Gemini API HTTP {e.code} error: {err_body[:200]}") from e
         except Exception as e:
@@ -341,7 +351,7 @@ class GeminiLLMProvider(BaseLLMProvider):
 def get_llm_provider(
     provider_name: str = "mock",
     api_key: Optional[str] = None,
-    model_name: str = "gemini-2.5-flash",
+    model_name: str = "gemini-1.5-flash",
 ) -> BaseLLMProvider:
     """Factory helper to obtain the configured LLM provider."""
     if provider_name.lower() == "gemini" and api_key:
