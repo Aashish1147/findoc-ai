@@ -1,9 +1,9 @@
 # FinDoc AI — Financial Document Intelligence Copilot
 
 [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B.svg)](https://streamlit.io/)
+[![Streamlit Cloud](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://findoc-ai-cwgd8gezsuchzo405wg5oz.streamlit.app)
 [![ChromaDB](https://img.shields.io/badge/Vector%20Store-ChromaDB-purple.svg)](https://www.trychroma.com/)
-[![Tests](https://img.shields.io/badge/Tests-77%20Passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-80%20Passed-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **FinDoc AI** is a document-grounded AI copilot for financial disclosures, annual reports, and policy documents. It indexes documents page-by-page, produces concise answers backed by verified physical page citations, compares terms across two documents, and explicitly abstains with `insufficient_evidence` when source documents lack the requested facts.
