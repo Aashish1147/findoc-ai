@@ -283,10 +283,11 @@ class GeminiLLMProvider(BaseLLMProvider):
         if not api_key:
             raise ConfigurationError("GEMINI_API_KEY must be provided for GeminiLLMProvider.")
         self.api_key = api_key
-        # Auto-normalize deprecated/non-existent model names (gemini-2.5-flash is retired)
-        # Google recommends gemini-2.0-flash as the replacement.
+        # Auto-normalize deprecated/nonexistent model names
+        # gemini-2.5-flash is retired; gemini-3.8-flash does not exist (Google typo in error messages)
+        # Both are redirected to the stable gemini-2.0-flash.
         normalized = (model_name or "gemini-2.0-flash").strip()
-        if "2.5" in normalized:
+        if "2.5" in normalized or "3.8" in normalized:
             normalized = "gemini-2.0-flash"
         self.model_name = normalized
 
@@ -295,22 +296,23 @@ class GeminiLLMProvider(BaseLLMProvider):
         return f"live ({self.model_name})"
 
     def generate(self, user_prompt: str, system_instruction: str) -> str:
-        """Call Google Gemini API via official HTTP REST endpoint using json mode."""
+        """Call Google Gemini API with retry/backoff and model fallback chain."""
         import urllib.request
         import urllib.error
+        import time
+
+        # Model fallback chain: try configured model first, then stable fallbacks
+        _FALLBACK_CHAIN = ["gemini-2.0-flash", "gemini-1.5-flash"]
+        models_to_try = [self.model_name] + [m for m in _FALLBACK_CHAIN if m != self.model_name]
 
         def _call_model(name: str) -> str:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{name}:generateContent?key={self.api_key}"
+            url = (
+                f"https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{name}:generateContent?key={self.api_key}"
+            )
             payload: Dict[str, Any] = {
-                "system_instruction": {
-                    "parts": [{"text": system_instruction}]
-                },
-                "contents": [
-                    {
-                        "role": "user",
-                        "parts": [{"text": user_prompt}],
-                    }
-                ],
+                "system_instruction": {"parts": [{"text": system_instruction}]},
+                "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
                 "generationConfig": {
                     "response_mime_type": "application/json",
                     "temperature": 0.0,
@@ -323,7 +325,7 @@ class GeminiLLMProvider(BaseLLMProvider):
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=30.0) as resp:
+            with urllib.request.urlopen(req, timeout=45.0) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
                 candidates = result.get("candidates", [])
                 if not candidates:
@@ -333,20 +335,43 @@ class GeminiLLMProvider(BaseLLMProvider):
                     raise GenerationError("Malformed candidate content structure from Gemini API.")
                 return content_parts[0]["text"]
 
-        try:
-            return _call_model(self.model_name)
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="replace")
-            # If 404 model not found and we didn't already use gemini-2.0-flash, fallback to gemini-2.0-flash
-            if e.code == 404 and self.model_name != "gemini-2.0-flash":
+        last_error: Exception = GenerationError("No models available.")
+        for model in models_to_try:
+            # Retry up to 3 times with exponential backoff for transient overload errors
+            for attempt in range(3):
                 try:
-                    return _call_model("gemini-2.0-flash")
-                except Exception:
-                    pass
-            # Do NOT log or expose the API key in the error message
-            raise GenerationError(f"Gemini API HTTP {e.code} error: {err_body[:200]}") from e
-        except Exception as e:
-            raise GenerationError(f"Failed to call Gemini provider: {e}") from e
+                    return _call_model(model)
+                except urllib.error.HTTPError as e:
+                    err_body = e.read().decode("utf-8", errors="replace")
+                    if e.code in (429, 503):
+                        # Transient overload / rate-limit – wait and retry
+                        wait = 2 ** attempt  # 1s, 2s, 4s
+                        time.sleep(wait)
+                        last_error = GenerationError(
+                            f"Gemini API overloaded (HTTP {e.code}) on {model}, "
+                            f"attempt {attempt + 1}/3. Retrying…"
+                        )
+                        continue
+                    elif e.code == 404:
+                        # Model not found – skip straight to next fallback
+                        last_error = GenerationError(
+                            f"Model {model!r} not found (HTTP 404). Trying next fallback."
+                        )
+                        break  # break retry loop, try next model
+                    else:
+                        # Non-retryable HTTP error
+                        raise GenerationError(
+                            f"Gemini API HTTP {e.code} error: {err_body[:300]}"
+                        ) from e
+                except GenerationError:
+                    raise
+                except Exception as e:
+                    raise GenerationError(f"Failed to call Gemini provider: {e}") from e
+            else:
+                # Exhausted all retries for this model – try next in chain
+                pass
+
+        raise last_error
 
 
 def get_llm_provider(

@@ -39,12 +39,18 @@ class Settings(BaseSettings):
     @field_validator("llm_model", mode="before")
     @classmethod
     def normalize_llm_model(cls, v: object) -> str:
-        """Strip whitespace and normalise deprecated model names."""
+        """Strip whitespace and normalise deprecated/nonexistent model names.
+
+        Known bad names and their replacements:
+          gemini-2.5-flash  →  gemini-2.0-flash  (retired)
+          gemini-3.8-flash  →  gemini-2.0-flash  (does not exist; Google error message typo)
+        """
         if isinstance(v, str):
             v = v.strip()
-            if "2.5" in v:
+            if "2.5" in v or "3.8" in v:
                 return "gemini-2.0-flash"
         return v  # type: ignore[return-value]
+
 
     # Local Storage Paths
     findoc_data_dir: Path = Field(
