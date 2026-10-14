@@ -24,8 +24,8 @@ class Settings(BaseSettings):
         description="Google Gemini API key. Required only when llm_provider='gemini'",
     )
     llm_model: str = Field(
-        default="gemini-2.0-flash",
-        description="Configured LLM model identifier (e.g. gemini-2.0-flash, gemini-1.5-flash)",
+        default="gemini-1.5-flash",
+        description="Configured LLM model identifier. Free-tier default: gemini-1.5-flash",
     )
 
     @field_validator("llm_provider", mode="before")
@@ -41,14 +41,15 @@ class Settings(BaseSettings):
     def normalize_llm_model(cls, v: object) -> str:
         """Strip whitespace and normalise deprecated/nonexistent model names.
 
-        Known bad names and their replacements:
-          gemini-2.5-flash  →  gemini-2.0-flash  (retired)
-          gemini-3.8-flash  →  gemini-2.0-flash  (does not exist; Google error message typo)
+        Known bad names → replaced with gemini-1.5-flash (free-tier safe):
+          gemini-2.5-flash  (retired)
+          gemini-3.8-flash  (does not exist; Google error message typo)
+          gemini-2.0-flash  (requires billing; redirect to 1.5-flash for safety)
         """
         if isinstance(v, str):
             v = v.strip()
-            if "2.5" in v or "3.8" in v:
-                return "gemini-2.0-flash"
+            if "2.5" in v or "3.8" in v or "2.0" in v:
+                return "gemini-1.5-flash"
         return v  # type: ignore[return-value]
 
 

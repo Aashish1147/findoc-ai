@@ -278,17 +278,16 @@ class GeminiLLMProvider(BaseLLMProvider):
     def __init__(
         self,
         api_key: str,
-        model_name: str = "gemini-2.0-flash",
+        model_name: str = "gemini-1.5-flash",
     ) -> None:
         if not api_key:
             raise ConfigurationError("GEMINI_API_KEY must be provided for GeminiLLMProvider.")
         self.api_key = api_key
-        # Auto-normalize deprecated/nonexistent model names
-        # gemini-2.5-flash is retired; gemini-3.8-flash does not exist (Google typo in error messages)
-        # Both are redirected to the stable gemini-2.0-flash.
-        normalized = (model_name or "gemini-2.0-flash").strip()
-        if "2.5" in normalized or "3.8" in normalized:
-            normalized = "gemini-2.0-flash"
+        # Normalize deprecated/nonexistent/billing-required model names to free-tier safe default.
+        # gemini-2.5-flash: retired | gemini-3.8-flash: doesn't exist | gemini-2.0-flash: needs billing
+        normalized = (model_name or "gemini-1.5-flash").strip()
+        if "2.5" in normalized or "3.8" in normalized or "2.0" in normalized:
+            normalized = "gemini-1.5-flash"
         self.model_name = normalized
 
     @property
@@ -301,8 +300,8 @@ class GeminiLLMProvider(BaseLLMProvider):
         import urllib.error
         import time
 
-        # Model fallback chain: try configured model first, then stable fallbacks
-        _FALLBACK_CHAIN = ["gemini-2.0-flash", "gemini-1.5-flash"]
+        # Model fallback chain: try configured model first, then free-tier safe fallbacks
+        _FALLBACK_CHAIN = ["gemini-1.5-flash", "gemini-1.5-flash-8b"]
         models_to_try = [self.model_name] + [m for m in _FALLBACK_CHAIN if m != self.model_name]
 
         def _call_model(name: str) -> str:
@@ -377,7 +376,7 @@ class GeminiLLMProvider(BaseLLMProvider):
 def get_llm_provider(
     provider_name: str = "mock",
     api_key: Optional[str] = None,
-    model_name: str = "gemini-2.0-flash",
+    model_name: str = "gemini-1.5-flash",
 ) -> BaseLLMProvider:
     """Factory helper to obtain the configured LLM provider."""
     if provider_name.lower() == "gemini" and api_key:

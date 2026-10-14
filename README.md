@@ -138,7 +138,7 @@ To enable live Google Gemini models, edit `.env`:
 ```env
 FINDOC_LLM_PROVIDER=gemini
 GEMINI_API_KEY=your_gemini_api_key_here
-FINDOC_LLM_MODEL=gemini-2.0-flash
+FINDOC_LLM_MODEL=gemini-1.5-flash
 ```
 
 ### Step 5: Launch the Application
